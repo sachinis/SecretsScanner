@@ -1,16 +1,14 @@
 import re
 import os
 import subprocess
-from concurrent.futures import ThreadPoolExecutor
 import json
 import argparse
-import time
 
 
 class SecretsScanner(object):
-    SOURCE_ROOT_DIRECTORY = '<<<ENTER THE ROOT DIRECTORY THAT CONTAINS YOUR SOURCE CODE HERE>>>'
-    PATTERN_FILE = '<<<ENTER THE ABSOLUTE LOCATION WHERE YOU HAVE STORED THE SECRETS PATTERN FILE>>>'
-
+    SOURCE_ROOT_DIRECTORY = <<ENTER ABSOLUTE PATH OF THE ROOT DIRECTORY OF THE SOURCE CODE THAT YOU WANT TO SCAN>>
+    PATTERN_FILE = <<ENTER ABSOLUTE PATH OF THE SECRETS PATTERN JSON FILE>>
+    
     def __init__(self):
         self.file_list = []
         self.block_pattern = []
@@ -22,10 +20,10 @@ class SecretsScanner(object):
         self.secrets = []
         self.changed_files = []
         self.scanned_file = []
-        self.generate_pattern_list()
+        self.generate_patterns()
         self.count = 0
 
-    def generate_pattern_list(self):
+    def generate_patterns(self):
         with open(self.PATTERN_FILE) as f:
             pattern = json.load(f)
             self.block_pattern = pattern["Block_Pattern"]
@@ -47,8 +45,8 @@ class SecretsScanner(object):
                 # Logic to not scan whitelisted files in pattern_file.json
                 if os.path.join(dirpath, file) not in self.allowed_files:
                     self.file_list.append(os.path.join(dirpath, file))
-            with ThreadPoolExecutor(max_workers=10) as executor2:
-                executor2.map(self.find_secrets, self.file_list)
+            for file in self.file_list:
+                self.find_secrets(file)
 
     # This method is a work in progress. Need to find the exact git command to get the list of merged files in a MR
     def partial_scan(self):
@@ -59,12 +57,17 @@ class SecretsScanner(object):
         #     # Parse the output from the  command to get changed files
         #     self.changed_files.append(file)
         # return self.changed_files
-        changed_files = ['/Users/testuser/test.txt', '/Users/testuser/test.csv']
-        with ThreadPoolExecutor(max_workers=10) as executor2:
-            executor2.map(self.find_secrets, changed_files)
+        changed_files = ['/Users/sachin/Documents/python-playground/test.txt',
+                '/Users/sachin/Documents/python-playground/secret-test.txt',
+                '/Users/sachin/Documents/python-playground/package_info.json',
+                '/Users/sachin/Documents/python-playground/TestScript1.py',
+                '/Users/sachin/Documents/python-playground/FileSystemService.py',
+                '/Users/sachin/Documents/python-playground/new_homes.csv']
+        for changed_file in changed_files:
+            self.find_secrets(changed_file)
 
+    # Finding secrets in files based on block patterns in pattern_file.json
     def find_secrets(self, filepath):
-        # Finding secrets in files based on block patterns in pattern_file.json
         if filepath not in self.scanned_file:
             self.scanned_file.append(filepath)
             try:
@@ -82,20 +85,26 @@ class SecretsScanner(object):
 
     def purge_allowed_patterns(self):
         # Purging secrets matching allowed patterns in pattern_file.json from self.secrets list
-        for apattern in self.allowed_string_pattern:
-            for index, item in enumerate(self.secrets):
-                if re.findall(apattern, item[1]):
-                    self.count += 1
-                    print(f'{self.count} - Deleting allowed string {apattern} '
-                          f'from file {self.secrets[index][0]}')
-                    del self.secrets[index]
+        if len(self.allowed_string_pattern) > 0 and len(self.secrets) > 0:
+            for apattern in self.allowed_string_pattern:
+                for index, item in reversed(list(enumerate(self.secrets))):
+                    if re.match(apattern, item[1]):
+                        print(f'Deleting secret "{item[1]}" due to allowed pattern "{apattern}"')
+                        self.count += 1
+                        del self.secrets[index]
+        else:
+            pass
         # Purging secrets found in whitelisted file lines from self.secrets list
-        for value in self.allowed_lines:
-            for index, item in enumerate(self.secrets):
-                if value[0] == item[0] and int(value[1]) == int(item[2]):
-                    self.count += 1
-                    print(f'{self.count} - Deleting allowed line {value[1]} in file {value[0]}')
-                    del self.secrets[index]
+        if len(self.allowed_lines) > 0 and len(self.secrets) > 0:
+            for value in self.allowed_lines:
+                for index, item in reversed(list(enumerate(self.secrets))):
+                    if re.match(value[0], item[0]) and int(value[1]) == int(item[2]):
+                        self.count += 1
+                        print(f'{self.count} - Deleting allowed line {value[1]} in file {value[0]} '
+                              f'and corresponding secret is {self.secrets[index]}')
+                        del self.secrets[index]
+        else:
+            pass
 
     def get_results(self):
         self.purge_allowed_patterns()
@@ -106,11 +115,10 @@ class SecretsScanner(object):
 
 
 def main():
-    t1 = time.perf_counter()
     parser = argparse.ArgumentParser(
         description="Pattern based secrets scanner",
         epilog='''
-        1) For scanning the entire codebase --> python3 SecretsScanner.py -f
+        1) For scanning the entire codebase --> python3 SecretsScanner.py -e
         2) For scanning partial/merged list of files --> python3 SecretsScanner.py -p'''
     )
     group = parser.add_mutually_exclusive_group()
@@ -121,45 +129,44 @@ def main():
     obj = SecretsScanner()
     if args.entire:
         print('-' * 50)
-        print(f'Debug Message : Starting full scan and finding block patterns')
+        print(f'Starting full scan and finding secrets based on block patterns')
         print('-'*50)
         obj.full_scan()
         print('-' * 50)
-        print(f'Debug Message : Starting purge of allowed patterns')
+        print(f'Starting purge of allowed patterns')
         print('-' * 50)
         results = obj.get_results()
     elif args.partial:
         print('-' * 50)
-        print(f'Debug Message : Starting partial scan and finding block patterns')
+        print(f'Starting partial scan and finding secrets based on block patterns')
         print('-' * 50)
         obj.partial_scan()
         print('-' * 50)
-        print(f'Debug Message : Starting purge of allowed patterns')
+        print(f'Starting purge of allowed patterns')
         print('-' * 50)
         results = obj.get_results()
     else:
         print('-' * 50)
-        print(f'Debug Message : Starting full scan and finding block patterns')
+        print(f'Starting full scan and finding secrets based on block patterns')
         print('-' * 50)
         obj.full_scan()
         print('-' * 50)
-        print(f'Debug Message : Starting purge of allowed patterns')
+        print(f'Starting purge of allowed patterns')
         print('-' * 50)
         results = obj.get_results()
     if results:
-        print('-'*50)
-        print('Results from Secret Scanner')
+        print('-' * 50)
+        print('Final result(s) from Secret Scanning')
         print('-' * 50)
         for index, (filename, text, line_num) in enumerate(results):
-            msg = f'~~~~ {index+1} - Secret "{text}" found in "{filename}" on line number : {line_num} ~~~~'
+            msg = f'~~~~ {index+1} - Secret "{text}" found in "{filename}" in line number : {line_num} ~~~~'
             print(msg)
         exit(1)
     else:
         print('No secrets were found')
         exit(0)
-    t2 = time.perf_counter()
-    print(f'Scanned {len(obj.scanned_file)} files in {round(t2-t1,2)} seconds')
 
 
 if __name__ == "__main__":
     main()
+
