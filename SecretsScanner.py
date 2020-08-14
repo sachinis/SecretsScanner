@@ -8,7 +8,7 @@ import argparse
 class SecretsScanner(object):
     SOURCE_ROOT_DIRECTORY = <<ENTER ABSOLUTE PATH OF THE ROOT DIRECTORY OF THE SOURCE CODE THAT YOU WANT TO SCAN>>
     PATTERN_FILE = <<ENTER ABSOLUTE PATH OF THE SECRETS PATTERN JSON FILE>>
-    
+
     def __init__(self):
         self.file_list = []
         self.block_pattern = []
@@ -20,8 +20,8 @@ class SecretsScanner(object):
         self.secrets = []
         self.changed_files = []
         self.scanned_file = []
-        self.generate_patterns()
         self.count = 0
+        self.generate_patterns()
 
     def generate_patterns(self):
         with open(self.PATTERN_FILE) as f:
@@ -31,8 +31,9 @@ class SecretsScanner(object):
             self.allowed_dirs = pattern["Allow_Dir"]
             self.allowed_files = pattern["Allow_File"]
             self.allowed_lines_pattern = pattern["Allow_File_Line"]
-        for pattern in self.allowed_lines_pattern:
-            self.allowed_lines.append((pattern.split(':$~')[0], pattern.split(':$~')[1]))
+        if len(self.allowed_lines_pattern) > 0:
+            for pattern in self.allowed_lines_pattern:
+                self.allowed_lines.append((pattern.split(':$~')[0], pattern.split(':$~')[1]))
 
     def full_scan(self, root=SOURCE_ROOT_DIRECTORY):
         for dirpath, dirs, files in os.walk(root):
@@ -169,4 +170,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
